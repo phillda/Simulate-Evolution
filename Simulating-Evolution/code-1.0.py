@@ -13,6 +13,7 @@
 #       2) https://matplotlib.org/3.5.0/api/_as_gen/matplotlib.animation.FuncAnimation.html
 #       3) https://beltoforion.de/en/simulated_evolution/
 #       4) http://ccl.northwestern.edu/rp/beagle/index.shtml#:~:text=Simulated%20Evolution%20is%20the%20umbrella,and%20learn%20about%20evolutionary%20processes.
+#       5) Look into PyGame 
 #
 #######################################################################
 
@@ -41,6 +42,13 @@ class Food:
         self.x = x
         self.y = y
 
+class Microbe:
+
+    energy = 15
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
 
 class Grid:
 
@@ -61,14 +69,70 @@ class Grid:
         self.species = species
 
     def set_grid_values(self):
+        # Set grid values based on what is in each location 
+        self.grid = np.zeros(self.n*self.n).reshape(self.n, self.n) 
+        
+        # Place food
         for food in self.food:
-            self.grid[food.x, food.y] = 1
+            if food.x != -1 and food.y != -1:
+                self.grid[food.x, food.y] = 1
 
+        # Place species
         for ind in self.species:
-            if self.grid[ind.x, ind.y] == 1:
-                self.grid[ind.x, ind.y] = 3
-            else:
-                self.grid[ind.x, ind.y] = 2
+            if ind.x != -1 and ind.y != -1: 
+                if self.grid[ind.x, ind.y] == 1:
+                    self.grid[ind.x, ind.y] = 3
+                else:
+                    self.grid[ind.x, ind.y] = 2
+
+    def delete_food(self, ind):
+        # This function deletes food that has been consumed. 
+        if self.grid[ind.x, ind.y] == 3:
+            for food in self.food:
+                if [food.x, food.y] == [ind.x, ind.y]:
+                    food.x, food.y = [-1, -1]
+
+    def update_food(self):
+        # Places new food that has been consumed 
+        for food in self.food:
+            if [food.x, food.y] == [-1, -1]:
+                temp = rn.sample(range(self.n * self.n), 1) # rn.sample returns a list, so only take the first element
+                new_x, new_y = divmod(temp[0], self.n)
+                while(self.grid[new_x, new_y] == 1 or self.grid[new_x, new_y] == 3):
+                    temp = rn.sample(range(self.n * self.n), 1) # rn.sample returns a list, so only take the first element
+                    new_x, new_y = divmod(temp[0], self.n)
+                food.x, food.y = new_x, new_y
+
+    def update_species(self):
+        for ind in self.species:
+            self.delete_food(ind)
+            if ind.energy != 0:
+                # Species moves every generation
+                new_x, new_y = matr[rn.randint(0, len(matr)-1)]
+                
+                # Edge of Grid Conditions
+                if ((ind.x + new_x) == self.n) or ((ind.x + new_x) < 0):
+                    if (ind.x + new_x) == self.n:
+                        ind.x = 0
+                    elif (ind.x + new_x) < 0: 
+                        ind.x = self.n - 1 
+                        
+                elif ((ind.y + new_y) == self.n) or ((ind.y + new_y) < 0):
+                    if (ind.y + new_y) == self.n:
+                        ind.y = 0
+                    elif (ind.y + new_y) < 0: 
+                        ind.y = self.n - 1 
+
+                else: 
+                    # Make a random legal move in the grid
+                    ind.x, ind.y = [ind.x + new_x, ind.y + new_y]
+
+                # Movement consumes species energy
+                if new_y == 0 and new_x == 0:
+                    pass
+                else: 
+                    ind.energy-=1
+            
     
     def show_food(self):
         print("Food")
@@ -98,31 +162,8 @@ class Grid:
 
         # Gridlines based on minor ticks
         ax.grid(which='minor', color='k', linestyle='-', linewidth=2)
-        plt.show()
-
-
-class Microbe:
-
-    energy = 15
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-# Functions
-def plot_grid():
-    ...
-
-def updates(grid, species, food):
-    ...
-
-
-def init(n, num_food, num_ind):
-    global grid
-    grid = Grid(n=n, num_food=num_food, num_ind=num_ind)
-    grid.init_placements()
-    grid.set_grid_values()
-    grid.plot()
+        background = fig.canvas.copy_from_bbox(ax.bbox)
+        # plt.show()
 
 # Main Function
 def main():
@@ -137,8 +178,19 @@ def main():
     parser.add_argument('-gen','--interval', type=int, dest='interval',  help='Amount of Generations to Simulate For', required=True)
     args = parser.parse_args()
 
-    init(args.N, args.food, args.ind)
+    grid = Grid(n=args.N, num_food=args.food, num_ind=args.ind)
+    grid.init_placements()
+    grid.set_grid_values()
+    
+    for i in range(args.interval):
+        grid.update_food()
+        grid.update_species()
+        grid.set_grid_values()
+        grid.plot()    
 
 # Call Main
 if __name__ == '__main__':
 	main()
+
+# Next Steps
+# 1) Add plot animation (.gif)? 
