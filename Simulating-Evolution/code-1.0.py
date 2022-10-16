@@ -18,11 +18,16 @@
 #######################################################################
 
 import argparse
-import random as rn
-import numpy as np
-import matplotlib.pyplot as plt
+import glob
+# import matplotlib.animation as animation
 import matplotlib.colors as cl
-import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import random as rn
+
+from PIL import Image
+
 
 # Global Variables
 matr = [[-1,0],
@@ -133,6 +138,9 @@ class Grid:
                 else: 
                     ind.energy-=1
             
+            else:
+                ind.x, ind.y = [-1, -1]
+            
     
     def show_food(self):
         print("Food")
@@ -144,7 +152,7 @@ class Grid:
         for ind in self.species:
             print(f"[{ind.x},{ind.y}]")
     
-    def plot(self):
+    def plot(self, i):
         fig, ax = plt.subplots()
         img = ax.imshow(self.grid, cmap=cl.ListedColormap(colors=['white', 'red', 'blue', 'purple']), vmin=0, vmax=3)        # 0 - black, 1 - red, 2 - blue, 3 - purple
 
@@ -163,7 +171,18 @@ class Grid:
         # Gridlines based on minor ticks
         ax.grid(which='minor', color='k', linestyle='-', linewidth=2)
         background = fig.canvas.copy_from_bbox(ax.bbox)
-        # plt.show()
+        
+        # Save and close figure
+        fig.savefig(f"./images/gen-{i}.png")
+        plt.close('all')
+
+    def create_gif(self):
+        # Maybe need to resize images with pillow
+        frames = [Image.open(image) for image in glob.glob(f"./images/*.png")]
+        frame_one = frames[0]
+        frame_one.save("evolution.gif", format="GIF", append_images=frames, 
+                save_all=True, duration=1000, loop=0)
+
 
 # Main Function
 def main():
@@ -172,25 +191,46 @@ def main():
     parser = argparse.ArgumentParser(description="Simulating Evolution")
 
 	# add arguments
-    parser.add_argument('-N', '--grid-size', type=int, dest='N', help='One Side Length of the Square Grid', required=True)
-    parser.add_argument('-num', '--num-of-species', type=int, dest='ind', help='Number of Initial Species', required=True)
-    parser.add_argument('-food', '--num-of-food', type=int, dest='food', help='Number of Initial food', required=True)
-    parser.add_argument('-gen','--interval', type=int, dest='interval',  help='Amount of Generations to Simulate For', required=True)
+    parser.add_argument('-N', '--grid-size', type=int, dest='N', 
+                help='One Side Length of the Square Grid', default=5, required=False)
+    parser.add_argument('-num', '--num-of-species', type=int, dest='ind', 
+                help='Number of Initial Species', default=1, required=False)
+    parser.add_argument('-food', '--num-of-food', type=int, dest='food', 
+                help='Number of Initial food', default=5, required=False)
+    parser.add_argument('-gen','--interval', type=int, dest='interval',  
+                help='Amount of Generations to Simulate For', default=50, required=False)
     args = parser.parse_args()
 
+    print("Initializing Placements...")
     grid = Grid(n=args.N, num_food=args.food, num_ind=args.ind)
     grid.init_placements()
     grid.set_grid_values()
     
+    print("Simulating Evolution...")
     for i in range(args.interval):
         grid.update_food()
         grid.update_species()
         grid.set_grid_values()
-        grid.plot()    
+        grid.plot(i)
+
+    print("Outputting GIF...")
+    grid.create_gif()
+    # delete_ims()
+        
+def delete_ims():
+    ims = glob.glob('./images/*.png')
+    for i in ims:
+        os.remove(i)
 
 # Call Main
 if __name__ == '__main__':
 	main()
 
 # Next Steps
-# 1) Add plot animation (.gif)? 
+# 1) Not giving energy when species consumes it
+# 2) Placing of food takes an extra cycle, possible check for 
+#       each grid location rather than each food
+
+# Some ideas... 
+# 1) Synch vs Asynch updates 
+# 2) 
