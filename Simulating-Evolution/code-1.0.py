@@ -25,7 +25,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import random as rn
-
 from PIL import Image
 
 
@@ -110,27 +109,34 @@ class Grid:
 
     def update_species(self):
         for ind in self.species:
+            # delete and replace "eaten" food
             self.delete_food(ind)
+
             if ind.energy != 0:
                 # Species moves every generation
                 new_x, new_y = matr[rn.randint(0, len(matr)-1)]
                 
                 # Edge of Grid Conditions
-                if ((ind.x + new_x) == self.n) or ((ind.x + new_x) < 0):
+                if ((ind.x + new_x) == self.n) or ((ind.x + new_x) < 0) or ((ind.y + new_y) == self.n) or ((ind.y + new_y) < 0):
+                    # if cur x pos + new x is "off the grid", adjust to other side
                     if (ind.x + new_x) == self.n:
                         ind.x = 0
                     elif (ind.x + new_x) < 0: 
                         ind.x = self.n - 1 
-                        
-                elif ((ind.y + new_y) == self.n) or ((ind.y + new_y) < 0):
+                    
+                    # if cur y pos + new y is "off the grid", adjust to other side
                     if (ind.y + new_y) == self.n:
                         ind.y = 0
                     elif (ind.y + new_y) < 0: 
                         ind.y = self.n - 1 
-
                 else: 
                     # Make a random legal move in the grid
                     ind.x, ind.y = [ind.x + new_x, ind.y + new_y]
+
+                # Check for food at updated location (give energy)
+                for food in self.food:
+                    if [ind.x, ind.y] == [food.x, food.y]:
+                        ind.energy += 5
 
                 # Movement consumes species energy
                 if new_y == 0 and new_x == 0:
@@ -138,6 +144,7 @@ class Grid:
                 else: 
                     ind.energy-=1
             
+            # Run out of energy, species dies
             else:
                 ind.x, ind.y = [-1, -1]
             
@@ -182,6 +189,16 @@ class Grid:
         frame_one = frames[0]
         frame_one.save("evolution.gif", format="GIF", append_images=frames, 
                 save_all=True, duration=1000, loop=0)
+        # delete_ims()
+
+    def delete_ims():
+        files = glob.glob('./images/*.png', recursive=True)
+
+        for f in files:
+            try:
+                os.remove(f)
+            except OSError as e:
+                print("Error: %s : %s" % (f, e.strerror))
 
 
 # Main Function
@@ -191,14 +208,18 @@ def main():
     parser = argparse.ArgumentParser(description="Simulating Evolution")
 
 	# add arguments
+    # Grid
     parser.add_argument('-N', '--grid-size', type=int, dest='N', 
-                help='One Side Length of the Square Grid', default=5, required=False)
+                help='One Side Length of the Square Grid', default=7, required=False)
+    # Species
     parser.add_argument('-num', '--num-of-species', type=int, dest='ind', 
                 help='Number of Initial Species', default=1, required=False)
+    # Food
     parser.add_argument('-food', '--num-of-food', type=int, dest='food', 
                 help='Number of Initial food', default=5, required=False)
+    # Generations
     parser.add_argument('-gen','--interval', type=int, dest='interval',  
-                help='Amount of Generations to Simulate For', default=50, required=False)
+                help='Amount of Generations to Simulate For', default=25, required=False)
     args = parser.parse_args()
 
     print("Initializing Placements...")
@@ -206,7 +227,7 @@ def main():
     grid.init_placements()
     grid.set_grid_values()
     
-    print("Simulating Evolution...")
+    print(f"Simulating {args.interval} Generations...")
     for i in range(args.interval):
         grid.update_food()
         grid.update_species()
@@ -233,4 +254,6 @@ if __name__ == '__main__':
 
 # Some ideas... 
 # 1) Synch vs Asynch updates 
-# 2) 
+# 2) Make species and food subclass of Grid, then pass Grid object to 
+#       all methods (make it easer to update food/species/grid relation)
+# 3) Dead species produce food? 
