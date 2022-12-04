@@ -19,13 +19,13 @@
 
 import argparse
 import glob
-# import matplotlib.animation as animation
 import matplotlib.colors as cl
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import random as rn
 from PIL import Image
+
 
 
 # Global Variables
@@ -46,7 +46,7 @@ class Food:
         self.x = x
         self.y = y
 
-class Microbe:
+class Species:
 
     energy = 15
 
@@ -56,26 +56,31 @@ class Microbe:
 
 class Grid:
 
-    def __init__(self, n, num_food, num_ind):
+    def __init__(self, n, num_food, num_ind, sync):
         self.n = n
         self.grid = np.zeros(n*n).reshape(n, n)
         self.num_food = num_food
         self.num_ind = num_ind
+        self.sync = sync
 
     def init_placements(self):
+        self.plant_trees()
         xys = rn.sample(range(self.n * self.n), self.num_ind)
         xys2 = rn.sample(range(self.n * self.n), self.num_food)
         points = [list(divmod(xy, self.n)) for xy in xys]           # Generate Random Points in Grid
         points2 = [list(divmod(xy, self.n)) for xy in xys2]         # Generate Random Points in Grid
-        species = [Microbe(x, y) for x, y in points]                # Assign generated points to Species Class
+        species = [Species(x, y) for x, y in points]                # Assign generated points to Species Class
         food = [Food(x, y) for x, y in points2]                     # Assign generated points to Food Class
         self.food = food
         self.species = species
+        self.check_for_bad_placement()
 
     def set_grid_values(self):
         # Set grid values based on what is in each location 
         self.grid = np.zeros(self.n*self.n).reshape(self.n, self.n) 
-        
+        for x,y in self.trees:
+            self.grid[x,y] = 4
+
         # Place food
         for food in self.food:
             if food.x != -1 and food.y != -1:
@@ -83,11 +88,24 @@ class Grid:
 
         # Place species
         for ind in self.species:
-            if ind.x != -1 and ind.y != -1: 
+            if ind.x != -1 and ind.y != -1:  # species not dead 
                 if self.grid[ind.x, ind.y] == 1:
                     self.grid[ind.x, ind.y] = 3
                 else:
                     self.grid[ind.x, ind.y] = 2
+            else: 
+                self.grid[ind.x, ind.y] = 1
+
+    def check_for_bad_placement(self):
+        for food in self.food:
+            while [food.x, food.y] in self.trees:
+                xy = rn.sample(range(self.n * self.n), 1)
+                [food.x, food.y] = divmod(xy[0], self.n)
+
+        for ind in self.species:
+            while [ind.x, ind.y] in self.trees:
+                xy = rn.sample(range(self.n * self.n), 1)
+                [ind.x, ind.y] = divmod(xy[0], self.n)
 
     def delete_food(self, ind):
         # This function deletes food that has been consumed. 
@@ -147,8 +165,15 @@ class Grid:
             # Run out of energy, species dies
             else:
                 ind.x, ind.y = [-1, -1]
-            
-    
+
+            if not self.sync:
+                self.update_food()
+
+    def plant_trees(self):
+        xys = rn.sample(range(self.n * self.n), round(0.2*self.n**2))
+        points = [list(divmod(xy, self.n)) for xy in xys] 
+        self.trees = points  
+
     def show_food(self):
         print("Food")
         for food in self.food:
@@ -161,7 +186,7 @@ class Grid:
     
     def plot(self, i):
         fig, ax = plt.subplots()
-        img = ax.imshow(self.grid, cmap=cl.ListedColormap(colors=['white', 'red', 'blue', 'purple']), vmin=0, vmax=3)        # 0 - black, 1 - red, 2 - blue, 3 - purple
+        img = ax.imshow(self.grid, cmap=cl.ListedColormap(colors=['black', 'red', 'blue', 'purple', 'green']), vmin=0, vmax=4)
 
         # Major ticks
         ax.set_xticks(np.arange(0, self.n, 1))
@@ -189,7 +214,7 @@ class Grid:
         frame_one = frames[0]
         frame_one.save("evolution.gif", format="GIF", append_images=frames, 
                 save_all=True, duration=1000, loop=0)
-        # delete_ims()
+        delete_ims()
 
     def delete_ims():
         files = glob.glob('./images/*.png', recursive=True)
@@ -210,27 +235,33 @@ def main():
 	# add arguments
     # Grid
     parser.add_argument('-N', '--grid-size', type=int, dest='N', 
-                help='One Side Length of the Square Grid', default=7, required=False)
+                help='One Side Length of the Square Grid', default=20, required=False)
     # Species
     parser.add_argument('-num', '--num-of-species', type=int, dest='ind', 
-                help='Number of Initial Species', default=1, required=False)
+                help='Number of Initial Species', default=50, required=False)
     # Food
     parser.add_argument('-food', '--num-of-food', type=int, dest='food', 
-                help='Number of Initial food', default=5, required=False)
+                help='Number of Initial food', default=80, required=False)
     # Generations
     parser.add_argument('-gen','--interval', type=int, dest='interval',  
-                help='Amount of Generations to Simulate For', default=25, required=False)
+                help='Amount of Generations to Simulate For', default=100, required=False)
+    # Sync/Async
+    parser.add_argument('-sync', type=bool, dest='sync',  
+                help='Synchronous or Asynchronous Updates', default=0, required=False)
+
     args = parser.parse_args()
 
     print("Initializing Placements...")
-    grid = Grid(n=args.N, num_food=args.food, num_ind=args.ind)
+    grid = Grid(n=args.N, num_food=args.food, num_ind=args.ind, sync=args.sync)
     grid.init_placements()
     grid.set_grid_values()
     
     print(f"Simulating {args.interval} Generations...")
     for i in range(args.interval):
-        grid.update_food()
+        if grid.sync: 
+            grid.update_food()
         grid.update_species()
+        grid.check_for_bad_placement()
         grid.set_grid_values()
         grid.plot(i)
 
@@ -253,7 +284,6 @@ if __name__ == '__main__':
 #       each grid location rather than each food
 
 # Some ideas... 
-# 1) Synch vs Asynch updates 
-# 2) Make species and food subclass of Grid, then pass Grid object to 
-#       all methods (make it easer to update food/species/grid relation)
-# 3) Dead species produce food? 
+# 1) Add obstacles
+# 2) Make species into NN
+# 3)  
