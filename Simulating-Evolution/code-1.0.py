@@ -39,6 +39,9 @@ matr = [[-1,0],
         [1,-1],
         [1,1]]
 
+def sort_func(x, y):
+    return(np.sqrt(np.square(y) - np.square(x)))
+
 # Classes 
 class Food:
 
@@ -48,7 +51,7 @@ class Food:
 
 class Species:
 
-    energy = 15
+    energy = 30
 
     def __init__(self, x, y):
         self.x = x
@@ -65,12 +68,10 @@ class Grid:
 
     def init_placements(self):
         self.plant_trees()
-        xys = rn.sample(range(self.n * self.n), self.num_ind)
-        xys2 = rn.sample(range(self.n * self.n), self.num_food)
-        points = [list(divmod(xy, self.n)) for xy in xys]           # Generate Random Points in Grid
-        points2 = [list(divmod(xy, self.n)) for xy in xys2]         # Generate Random Points in Grid
-        species = [Species(x, y) for x, y in points]                # Assign generated points to Species Class
-        food = [Food(x, y) for x, y in points2]                     # Assign generated points to Food Class
+        points = self.random_coords(self.num_ind)           # Generate Random Points in Grid
+        points2 = self.random_coords(self.num_food)         # Generate Random Points in Grid
+        species = [Species(x, y) for x, y in points]        # Assign generated points to Species Class
+        food = [Food(x, y) for x, y in points2]             # Assign generated points to Food Class
         self.food = food
         self.species = species
         self.check_for_bad_placement()
@@ -80,6 +81,9 @@ class Grid:
         self.grid = np.zeros(self.n*self.n).reshape(self.n, self.n) 
         for x,y in self.trees:
             self.grid[x,y] = 4
+            self.grid[x+1,y] = 4
+            self.grid[x,y+1] = 4
+            self.grid[x+1,y+1] = 4
 
         # Place food
         for food in self.food:
@@ -96,16 +100,33 @@ class Grid:
             else: 
                 self.grid[ind.x, ind.y] = 1
 
+    def tree_overlap_check(self, border_pts):
+        for pts in border_pts:
+            if pts in self.trees:
+                return True
+            else:
+                return False
+
+    def overlap_check(self, x, y):
+        if [x,y] in self.trees:
+            return True
+        elif [x-1,y] in self.trees:
+            return True
+        elif [x,y-1] in self.trees:
+            return True
+        elif [x-1,y-1] in self.trees:
+            return True
+        else:
+            return False
+
     def check_for_bad_placement(self):
         for food in self.food:
-            while [food.x, food.y] in self.trees:
-                xy = rn.sample(range(self.n * self.n), 1)
-                [food.x, food.y] = divmod(xy[0], self.n)
+            while(self.overlap_check(food.x, food.y)):
+                [food.x, food.y] = self.random_coords(1)
 
         for ind in self.species:
-            while [ind.x, ind.y] in self.trees:
-                xy = rn.sample(range(self.n * self.n), 1)
-                [ind.x, ind.y] = divmod(xy[0], self.n)
+            while(self.overlap_check(ind.x, ind.y)):
+                [ind.x, ind.y] = self.random_coords(1)
 
     def delete_food(self, ind):
         # This function deletes food that has been consumed. 
@@ -118,11 +139,9 @@ class Grid:
         # Places new food that has been consumed 
         for food in self.food:
             if [food.x, food.y] == [-1, -1]:
-                temp = rn.sample(range(self.n * self.n), 1) # rn.sample returns a list, so only take the first element
-                new_x, new_y = divmod(temp[0], self.n)
+                new_x, new_y = self.random_coords(1)
                 while(self.grid[new_x, new_y] == 1 or self.grid[new_x, new_y] == 3):
-                    temp = rn.sample(range(self.n * self.n), 1) # rn.sample returns a list, so only take the first element
-                    new_x, new_y = divmod(temp[0], self.n)
+                    new_x, new_y = self.random_coords(1)
                 food.x, food.y = new_x, new_y
 
     def update_species(self):
@@ -170,9 +189,26 @@ class Grid:
                 self.update_food()
 
     def plant_trees(self):
-        xys = rn.sample(range(self.n * self.n), round(0.2*self.n**2))
-        points = [list(divmod(xy, self.n)) for xy in xys] 
-        self.trees = points  
+        points = self.random_coords(round(round(0.2*self.n**2)/4))
+        self.trees = sorted(points)
+        ls = [*matr[0:4], *matr[5:8]] # Matr Values without [0,0] - Avoid overlaps with self
+        for i, [x,y] in enumerate(self.trees):
+            # Check the border of each tree for another to detect overlaps
+            border_pts = [[x+mat_x, y+mat_y] for mat_x, mat_y in ls] # Calc border pts
+            while ((x==self.n-1) or (y==self.n-1) or self.tree_overlap_check(border_pts)): # Tree on edge or has border overlap
+                x,y = self.random_coords(1)
+                self.trees[i] = [x,y]
+                border_pts = [[x+mat_x, y+mat_y] for mat_x, mat_y in ls] # Calc new border pts
+
+
+    def random_coords(self, n):
+        temp = rn.sample(range(self.n * self.n), n) # rn.sample returns a list, so only take the first element
+        if n == 1:
+            x, y = divmod(temp[0], self.n)
+            return(x, y)
+        else:
+            points = [list(divmod(xy, self.n)) for xy in temp]  
+            return(points)
 
     def show_food(self):
         print("Food")
@@ -205,26 +241,25 @@ class Grid:
         background = fig.canvas.copy_from_bbox(ax.bbox)
         
         # Save and close figure
-        fig.savefig(f"./images/gen-{i}.png")
+        fig.savefig(f"../images/gen-{i}.png")
         plt.close('all')
 
     def create_gif(self):
         # Maybe need to resize images with pillow
-        frames = [Image.open(image) for image in glob.glob(f"./images/*.png")]
+        frames = [Image.open(image) for image in glob.glob(f"../images/*.png")]
         frame_one = frames[0]
         frame_one.save("evolution.gif", format="GIF", append_images=frames, 
                 save_all=True, duration=1000, loop=0)
         delete_ims()
 
     def delete_ims():
-        files = glob.glob('./images/*.png', recursive=True)
+        files = glob.glob('../images/*.png', recursive=True)
 
         for f in files:
             try:
                 os.remove(f)
             except OSError as e:
                 print("Error: %s : %s" % (f, e.strerror))
-
 
 # Main Function
 def main():
@@ -235,13 +270,13 @@ def main():
 	# add arguments
     # Grid
     parser.add_argument('-N', '--grid-size', type=int, dest='N', 
-                help='One Side Length of the Square Grid', default=20, required=False)
+                help='One Side Length of the Square Grid', default=50, required=False)
     # Species
     parser.add_argument('-num', '--num-of-species', type=int, dest='ind', 
-                help='Number of Initial Species', default=50, required=False)
+                help='Number of Initial Species', default=30, required=False)
     # Food
     parser.add_argument('-food', '--num-of-food', type=int, dest='food', 
-                help='Number of Initial food', default=80, required=False)
+                help='Number of Initial food', default=20, required=False)
     # Generations
     parser.add_argument('-gen','--interval', type=int, dest='interval',  
                 help='Amount of Generations to Simulate For', default=100, required=False)
@@ -279,11 +314,10 @@ if __name__ == '__main__':
 	main()
 
 # Next Steps
-# 1) Not giving energy when species consumes it
-# 2) Placing of food takes an extra cycle, possible check for 
-#       each grid location rather than each food
+# 1) Random Species Location Jumping???
+# 2) Add Species Attributes that help/hinder
 
 # Some ideas... 
-# 1) Add obstacles
+# 1) 
 # 2) Make species into NN
 # 3)  
