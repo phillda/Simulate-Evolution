@@ -39,34 +39,47 @@ matr = [[-1,0],
         [1,-1],
         [1,1]]
 
-def sort_func(x, y):
+def sort_func(x:int, y:int):
+    '''
+        This function is used to calculate the magnitude of a coord pair
+    '''
     return(np.sqrt(np.square(y) - np.square(x)))
 
 # Classes 
 class Food:
-
-    def __init__(self, x, y):
+    '''
+        Class for the Food object
+    '''
+    def __init__(self, x:int, y:int):
         self.x = x
         self.y = y
 
 class Species:
-
+    '''
+    Class for the Species object
+    '''
     energy = 30
 
-    def __init__(self, x, y):
+    def __init__(self, x:int, y:int):
         self.x = x
         self.y = y
 
 class Grid:
-
+    '''
+        Class for the environment
+    '''
     def __init__(self, n, num_food, num_ind, sync):
-        self.n = n
-        self.grid = np.zeros(n*n).reshape(n, n)
-        self.num_food = num_food
+        self.n = n  # size of grid
+        self.grid = np.zeros(n*n).reshape(n, n) # gri
+        self.num_food = num_food 
         self.num_ind = num_ind
         self.sync = sync
 
     def init_placements(self):
+        '''
+            Initialize the placements of Species, Food, Trees in Grid
+            and check for disallowed placements (overlaps)
+        '''
         self.plant_trees()
         points = self.random_coords(self.num_ind)           # Generate Random Points in Grid
         points2 = self.random_coords(self.num_food)         # Generate Random Points in Grid
@@ -77,9 +90,18 @@ class Grid:
         self.check_for_bad_placement()
 
     def set_grid_values(self):
-        # Set grid values based on what is in each location 
+        '''
+            Set the grid values at each location according to 
+            what is currently placed there (food, species, tree)
+            0   -   Empty
+            1   -   Food
+            2   -   Species
+            3   -   Species & Food
+            4   -   Tree
+        '''
         self.grid = np.zeros(self.n*self.n).reshape(self.n, self.n) 
         for x,y in self.trees:
+            # Set values for tree. 2x2 size
             self.grid[x,y] = 4
             self.grid[x+1,y] = 4
             self.grid[x,y+1] = 4
@@ -101,6 +123,9 @@ class Grid:
                 self.grid[ind.x, ind.y] = 1
 
     def tree_overlap_check(self, border_pts):
+        '''
+            Checks for trees overlapping each other
+        '''
         for pts in border_pts:
             if pts in self.trees:
                 return True
@@ -108,6 +133,9 @@ class Grid:
                 return False
 
     def overlap_check(self, x, y):
+        '''
+            Checks if point [x,y] is overlapping a tree
+        '''
         if [x,y] in self.trees:
             return True
         elif [x-1,y] in self.trees:
@@ -120,23 +148,33 @@ class Grid:
             return False
 
     def check_for_bad_placement(self):
+        '''
+            Checks if food or species is overlapping a tree
+            (not allowed)  
+        '''
         for food in self.food:
-            while(self.overlap_check(food.x, food.y)):
+            while(self.overlap_check(food.x, food.y)):  
+                # Generate new coords
                 [food.x, food.y] = self.random_coords(1)
 
         for ind in self.species:
             while(self.overlap_check(ind.x, ind.y)):
+                # Generate new coords
                 [ind.x, ind.y] = self.random_coords(1)
 
     def delete_food(self, ind):
-        # This function deletes food that has been consumed. 
+        '''
+            Deletes food that has been consumed. 
+        '''
         if self.grid[ind.x, ind.y] == 3:
             for food in self.food:
                 if [food.x, food.y] == [ind.x, ind.y]:
                     food.x, food.y = [-1, -1]
 
     def update_food(self):
-        # Places new food that has been consumed 
+        '''
+            Places new food that has been consumed 
+        '''
         for food in self.food:
             if [food.x, food.y] == [-1, -1]:
                 new_x, new_y = self.random_coords(1)
@@ -145,6 +183,11 @@ class Grid:
                 food.x, food.y = new_x, new_y
 
     def update_species(self):
+        '''
+            Generates a move for each Indiv., 
+            gives energy if move is to food
+            dies if energy = 0
+        '''
         for ind in self.species:
             # delete and replace "eaten" food
             self.delete_food(ind)
@@ -189,6 +232,10 @@ class Grid:
                 self.update_food()
 
     def plant_trees(self):
+        '''
+            Generates random coord pairs for tree placement
+            Avoids overlaps  
+        '''
         points = self.random_coords(round(round(0.2*self.n**2)/4))
         self.trees = sorted(points)
         ls = [*matr[0:4], *matr[5:8]] # Matr Values without [0,0] - Avoid overlaps with self
@@ -200,8 +247,10 @@ class Grid:
                 self.trees[i] = [x,y]
                 border_pts = [[x+mat_x, y+mat_y] for mat_x, mat_y in ls] # Calc new border pts
 
-
     def random_coords(self, n):
+        '''
+            Generates random coordinate pair
+        '''
         temp = rn.sample(range(self.n * self.n), n) # rn.sample returns a list, so only take the first element
         if n == 1:
             x, y = divmod(temp[0], self.n)
