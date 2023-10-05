@@ -29,7 +29,7 @@ from PIL import Image
 
 
 # Global Variables
-matr = [[-1,0],
+matr = np.array([[-1,0],
         [1, 0],
         [0,-1],
         [0,1],
@@ -37,7 +37,7 @@ matr = [[-1,0],
         [-1,-1],
         [-1,1],
         [1,-1],
-        [1,1]]
+        [1,1]])
 
 def sort_func(x:int, y:int):
     '''
@@ -50,6 +50,9 @@ class Food:
     '''
         Class for the Food object
     '''
+
+    energy_boost = 5
+
     def __init__(self, x:int, y:int):
         self.x = x
         self.y = y
@@ -59,6 +62,7 @@ class Species:
     Class for the Species object
     '''
     energy = 30
+    speed = 1
 
     def __init__(self, x:int, y:int):
         self.x = x
@@ -178,6 +182,8 @@ class Grid:
         for food in self.food:
             if [food.x, food.y] == [-1, -1]:
                 new_x, new_y = self.random_coords(1)
+                if rn.random() < 20:    # 20% chance of super food
+                    food.energy_boost = 20
                 while(self.grid[new_x, new_y] == 1 or self.grid[new_x, new_y] == 3):
                     new_x, new_y = self.random_coords(1)
                 food.x, food.y = new_x, new_y
@@ -194,7 +200,7 @@ class Grid:
 
             if ind.energy != 0:
                 # Species moves every generation
-                new_x, new_y = matr[rn.randint(0, len(matr)-1)]
+                new_x, new_y = ind.speed*matr[rn.randint(0, len(matr)-1)]
                 
                 # Edge of Grid Conditions
                 if ((ind.x + new_x) == self.n) or ((ind.x + new_x) < 0) or ((ind.y + new_y) == self.n) or ((ind.y + new_y) < 0):
@@ -216,7 +222,7 @@ class Grid:
                 # Check for food at updated location (give energy)
                 for food in self.food:
                     if [ind.x, ind.y] == [food.x, food.y]:
-                        ind.energy += 5
+                        ind.energy += food.energy_boost
 
                 # Movement consumes species energy
                 if new_y == 0 and new_x == 0:
@@ -290,12 +296,12 @@ class Grid:
         background = fig.canvas.copy_from_bbox(ax.bbox)
         
         # Save and close figure
-        fig.savefig(f"../images/gen-{i}.png")
+        fig.savefig(f"./images/gen-{i}.png")
         plt.close('all')
 
     def create_gif(self):
         # Maybe need to resize images with pillow
-        frames = [Image.open(image) for image in glob.glob(f"../images/*.png")]
+        frames = [Image.open(image) for image in glob.glob(f"./images/*.png")]
         frame_one = frames[0]
         frame_one.save("evolution.gif", format="GIF", append_images=frames, 
                 save_all=True, duration=1000, loop=0)
@@ -360,13 +366,19 @@ def delete_ims():
 
 # Call Main
 if __name__ == '__main__':
-	main()
+    main()
 
 # Next Steps
-# 1) Random Species Location Jumping???
-# 2) Add Species Attributes that help/hinder
+# 1) Add new color for super food? 
+# 2) 
 
 # Some ideas... 
 # 1) 
 # 2) Make species into NN
 # 3)  
+
+# Order seems weird: 
+# Place everything 
+# Update species energy
+# Replace Food
+# Move Ind
