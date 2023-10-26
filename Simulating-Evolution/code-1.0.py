@@ -1,384 +1,156 @@
-#######################################################################
-# 
-# Developer: Dallas Phillips
-# Project: Simulating Evolution
-# Version: 1.0
-# Description:
-#       This program is designed to simulate evolution with variability
-# based on the natural occurance of life throughout the history of the
-# universe. 
-#
-# References: 
-#       1) https://www.geeksforgeeks.org/conways-game-life-python-implementation/
-#       2) https://matplotlib.org/3.5.0/api/_as_gen/matplotlib.animation.FuncAnimation.html
-#       3) https://beltoforion.de/en/simulated_evolution/
-#       4) http://ccl.northwestern.edu/rp/beagle/index.shtml#:~:text=Simulated%20Evolution%20is%20the%20umbrella,and%20learn%20about%20evolutionary%20processes.
-#       5) Look into PyGame 
-#
-#######################################################################
-
-import argparse
-import glob
-import matplotlib.colors as cl
-import matplotlib.pyplot as plt
 import numpy as np
-import os
-import random as rn
-from PIL import Image
-
-
-
-# Global Variables
-matr = np.array([[-1,0],
-        [1, 0],
-        [0,-1],
-        [0,1],
-        [0,0],
-        [-1,-1],
-        [-1,1],
-        [1,-1],
-        [1,1]])
-
-def sort_func(x:int, y:int):
-    '''
-        This function is used to calculate the magnitude of a coord pair
-    '''
-    return(np.sqrt(np.square(y) - np.square(x)))
-
-# Classes 
-class Food:
-    '''
-        Class for the Food object
-    '''
-
-    energy_boost = 5
-
-    def __init__(self, x:int, y:int):
-        self.x = x
-        self.y = y
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import argparse
 
 class Species:
-    '''
-    Class for the Species object
-    '''
-    energy = 30
-    speed = 1
+    def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
+        self.speed = speed
+        self.energy = energy
+        self.sense_area = sense_area
+        self.memory = self.initialize_memory(memory_input_size, memory_hidden_units)
+        self.position = position
+        self.alive = True
 
-    def __init__(self, x:int, y:int):
-        self.x = x
-        self.y = y
+    def initialize_memory(self, input_size, hidden_units):
+        model = tf.keras.Sequential()
+        model.add(tf.keras.layers.Input(shape=(input_size,)))
 
-class Grid:
-    '''
-        Class for the environment
-    '''
-    def __init__(self, n, num_food, num_ind, sync):
-        self.n = n  # size of grid
-        self.grid = np.zeros(n*n).reshape(n, n) # gri
-        self.num_food = num_food 
-        self.num_ind = num_ind
-        self.sync = sync
+        for units in hidden_units:
+            model.add(tf.keras.layers.Dense(units, activation='relu'))
 
-    def init_placements(self):
-        '''
-            Initialize the placements of Species, Food, Trees in Grid
-            and check for disallowed placements (overlaps)
-        '''
-        self.plant_trees()
-        points = self.random_coords(self.num_ind)           # Generate Random Points in Grid
-        points2 = self.random_coords(self.num_food)         # Generate Random Points in Grid
-        species = [Species(x, y) for x, y in points]        # Assign generated points to Species Class
-        food = [Food(x, y) for x, y in points2]             # Assign generated points to Food Class
-        self.food = food
-        self.species = species
-        self.check_for_bad_placement()
+        model.add(tf.keras.layers.Dense(input_size, activation='linear'))  # Output layer
 
-    def set_grid_values(self):
-        '''
-            Set the grid values at each location according to 
-            what is currently placed there (food, species, tree)
-            0   -   Empty
-            1   -   Food
-            2   -   Species
-            3   -   Species & Food
-            4   -   Tree
-        '''
-        self.grid = np.zeros(self.n*self.n).reshape(self.n, self.n) 
-        for x,y in self.trees:
-            # Set values for tree. 2x2 size
-            self.grid[x,y] = 4
-            self.grid[x+1,y] = 4
-            self.grid[x,y+1] = 4
-            self.grid[x+1,y+1] = 4
+        return model
 
-        # Place food
-        for food in self.food:
-            if food.x != -1 and food.y != -1:
-                self.grid[food.x, food.y] = 1
+    def feed(self, food_energy):
+        self.energy += food_energy
 
-        # Place species
-        for ind in self.species:
-            if ind.x != -1 and ind.y != -1:  # species not dead 
-                if self.grid[ind.x, ind.y] == 1:
-                    self.grid[ind.x, ind.y] = 3
-                else:
-                    self.grid[ind.x, ind.y] = 2
-            else: 
-                self.grid[ind.x, ind.y] = 1
+    def move(self, new_position):
+        self.energy -= self.speed
+        self.position = new_position
 
-    def tree_overlap_check(self, border_pts):
-        '''
-            Checks for trees overlapping each other
-        '''
-        for pts in border_pts:
-            if pts in self.trees:
-                return True
-            else:
-                return False
+    def sense_and_remember(self, sensory_input):
+        sensory_input = np.array(sensory_input)
+        sensory_input = sensory_input.reshape((1, -1))
+        new_memory = self.memory(sensory_input)
+        self.memory.set_weights(new_memory.get_weights())
 
-    def overlap_check(self, x, y):
-        '''
-            Checks if point [x,y] is overlapping a tree
-        '''
-        if [x,y] in self.trees:
-            return True
-        elif [x-1,y] in self.trees:
-            return True
-        elif [x,y-1] in self.trees:
-            return True
-        elif [x-1,y-1] in self.trees:
-            return True
-        else:
-            return False
+    def check_energy(self):
+        if self.energy <= 0:
+            self.alive = False
 
-    def check_for_bad_placement(self):
-        '''
-            Checks if food or species is overlapping a tree
-            (not allowed)  
-        '''
-        for food in self.food:
-            while(self.overlap_check(food.x, food.y)):  
-                # Generate new coords
-                [food.x, food.y] = self.random_coords(1)
+class Predator(Species):
+    def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
+        super().__init__(speed, energy, sense_area, memory_input_size, memory_hidden_units, position)
+        # add pred specification information here
 
-        for ind in self.species:
-            while(self.overlap_check(ind.x, ind.y)):
-                # Generate new coords
-                [ind.x, ind.y] = self.random_coords(1)
+class Prey(Species):
+    def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
+        super().__init__(speed, energy, sense_area, memory_input_size, memory_hidden_units, position)
+        # add prey specification information here
 
-    def delete_food(self, ind):
-        '''
-            Deletes food that has been consumed. 
-        '''
-        if self.grid[ind.x, ind.y] == 3:
-            for food in self.food:
-                if [food.x, food.y] == [ind.x, ind.y]:
-                    food.x, food.y = [-1, -1]
+    def get_consumed(self, predator):
+        predator.feed(self.energy) # feed the predator the prey energy
+        self.alive = False
 
-    def update_food(self):
-        '''
-            Places new food that has been consumed 
-        '''
-        for food in self.food:
-            if [food.x, food.y] == [-1, -1]:
-                new_x, new_y = self.random_coords(1)
-                if rn.random() < 20:    # 20% chance of super food
-                    food.energy_boost = 20
-                while(self.grid[new_x, new_y] == 1 or self.grid[new_x, new_y] == 3):
-                    new_x, new_y = self.random_coords(1)
-                food.x, food.y = new_x, new_y
+class Food:
+    def __init__(self, energy, position):
+        self.energy = energy
+        self.position = position
 
-    def update_species(self):
-        '''
-            Generates a move for each Indiv., 
-            gives energy if move is to food
-            dies if energy = 0
-        '''
-        for ind in self.species:
-            # delete and replace "eaten" food
-            self.delete_food(ind)
+    def get_consumed(self, prey):
+        prey.feed(self.energy)
+        self.energy = 0
+        self.new_position()
 
-            if ind.energy != 0:
-                # Species moves every generation
-                new_x, new_y = ind.speed*matr[rn.randint(0, len(matr)-1)]
-                
-                # Edge of Grid Conditions
-                if ((ind.x + new_x) == self.n) or ((ind.x + new_x) < 0) or ((ind.y + new_y) == self.n) or ((ind.y + new_y) < 0):
-                    # if cur x pos + new x is "off the grid", adjust to other side
-                    if (ind.x + new_x) == self.n:
-                        ind.x = 0
-                    elif (ind.x + new_x) < 0: 
-                        ind.x = self.n - 1 
-                    
-                    # if cur y pos + new y is "off the grid", adjust to other side
-                    if (ind.y + new_y) == self.n:
-                        ind.y = 0
-                    elif (ind.y + new_y) < 0: 
-                        ind.y = self.n - 1 
-                else: 
-                    # Make a random legal move in the grid
-                    ind.x, ind.y = [ind.x + new_x, ind.y + new_y]
+    def new_position(self):
+        new_position = np.random.rand(2) * np.array(map_size)
+        self.position = new_position
 
-                # Check for food at updated location (give energy)
-                for food in self.food:
-                    if [ind.x, ind.y] == [food.x, food.y]:
-                        ind.energy += food.energy_boost
+def update(frame):
+    for p in prey + predators:
+        if p.alive:
+            new_position = p.position + (np.random.rand(2) - 0.5) * 2
+            p.move(np.clip(new_position, [0, 0], map_size))
+            p.check_energy()
 
-                # Movement consumes species energy
-                if new_y == 0 and new_x == 0:
-                    pass
-                else: 
-                    ind.energy-=1
-            
-            # Run out of energy, species dies
-            else:
-                ind.x, ind.y = [-1, -1]
+    # Check for consumed food
+    for f in food_items:
+        for p in prey:
+            if p.alive:
+                distance = np.linalg.norm(f.position - p.position)
+                if distance <= p.sense_area:
+                    f.get_consumed(p)
 
-            if not self.sync:
-                self.update_food()
+    # Check for consumed prey
+    for p in prey:
+        for pred in predators:
+            if pred.alive:
+                distance = np.linalg.norm(p.position - pred.position)
+                if distance <= pred.sense_area:
+                    p.get_consumed(pred)
 
-    def plant_trees(self):
-        '''
-            Generates random coord pairs for tree placement
-            Avoids overlaps  
-        '''
-        points = self.random_coords(round(round(0.2*self.n**2)/4))
-        self.trees = sorted(points)
-        ls = [*matr[0:4], *matr[5:8]] # Matr Values without [0,0] - Avoid overlaps with self
-        for i, [x,y] in enumerate(self.trees):
-            # Check the border of each tree for another to detect overlaps
-            border_pts = [[x+mat_x, y+mat_y] for mat_x, mat_y in ls] # Calc border pts
-            while ((x==self.n-1) or (y==self.n-1) or self.tree_overlap_check(border_pts)): # Tree on edge or has border overlap
-                x,y = self.random_coords(1)
-                self.trees[i] = [x,y]
-                border_pts = [[x+mat_x, y+mat_y] for mat_x, mat_y in ls] # Calc new border pts
+    # Remove dead species
+    prey[:] = [p for p in prey if p.alive]
+    predators[:] = [p for p in predators if p.alive]
 
-    def random_coords(self, n):
-        '''
-            Generates random coordinate pair
-        '''
-        temp = rn.sample(range(self.n * self.n), n) # rn.sample returns a list, so only take the first element
-        if n == 1:
-            x, y = divmod(temp[0], self.n)
-            return(x, y)
-        else:
-            points = [list(divmod(xy, self.n)) for xy in temp]  
-            return(points)
+    # Reproduction
+    # for p in predators:
+    #     for pred in [pred for pred in predators if pred != p]:
+    #         if p.energy >= 10 and pred.energy >= 10:
+    #             predators.append(Predator(5, 50, 10, 6, [12, 12], np.random.rand(2) * np.array(map_size)))
 
-    def show_food(self):
-        print("Food")
-        for food in self.food:
-            print(f"[{food.x},{food.y}]")
+    # for p in prey:
+    #     for p2 in [prey2 for prey2 in prey if prey2!= p]:
+    #         if p.energy >= 5 and p2.energy >= 5:
+    #             prey.append(Prey(2, 40, 8, 4, [8, 8], np.random.rand(2) * np.array(map_size)))
 
-    def show_species(self):
-        print("Species")
-        for ind in self.species:
-            print(f"[{ind.x},{ind.y}]")
-    
-    def plot(self, i):
-        fig, ax = plt.subplots()
-        img = ax.imshow(self.grid, cmap=cl.ListedColormap(colors=['black', 'red', 'blue', 'purple', 'green']), vmin=0, vmax=4)
+    scatter_predators.set_offsets(np.array([[p.position[0] for p in predators], [p.position[1] for p in predators]]).T)
+    scatter_prey.set_offsets(np.array([[p.position[0] for p in prey], [p.position[1] for p in prey]]).T)
+    scatter_food.set_offsets(np.array([[f.position[0] for f in food_items], [f.position[1] for f in food_items]]).T)
 
-        # Major ticks
-        ax.set_xticks(np.arange(0, self.n, 1))
-        ax.set_yticks(np.arange(0, self.n, 1))
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Predator-Prey Simulation")
+    parser.add_argument("--num_predators", type=int, default=50, help="Number of predators")
+    parser.add_argument("--num_prey", type=int, default=50, help="Number of prey")
+    parser.add_argument("--num_food", type=int, default=40, help="Number of food items")
+    parser.add_argument("--num_generations", type=int, default=500, help="Total number of updates")
+    return parser.parse_args()
 
-        # Labels for major ticks
-        ax.set_xticklabels("")
-        ax.set_yticklabels("")
+if __name__ == "__main__":
+    # parse arguments
+    args = parse_arguments()
 
-        # Minor ticks
-        ax.set_xticks(np.arange(-.5, self.n, 1), minor=True)
-        ax.set_yticks(np.arange(-.5, self.n, 1), minor=True)
+    num_predators = args.num_predators
+    num_prey = args.num_prey
+    num_food = args.num_food
+    generations = args.num_generations
 
-        # Gridlines based on minor ticks
-        ax.grid(which='minor', color='k', linestyle='-', linewidth=2)
-        background = fig.canvas.copy_from_bbox(ax.bbox)
-        
-        # Save and close figure
-        fig.savefig(f"./images/gen-{i}.png")
-        plt.close('all')
+    # add as argument?
+    map_size = (100, 100)
 
-    def create_gif(self):
-        # Maybe need to resize images with pillow
-        frames = [Image.open(image) for image in glob.glob(f"./images/*.png")]
-        frame_one = frames[0]
-        frame_one.save("evolution.gif", format="GIF", append_images=frames, 
-                save_all=True, duration=1000, loop=0)
-        delete_ims()
+    # initialize simulation variables (randomize)
+    predators = [Predator(5, 50, 2, 6, [12, 12], np.random.rand(2) * np.array(map_size)) for _ in range(num_predators)]
+    prey = [Prey(2, 40, 8, 5, [8, 8], np.random.rand(2) * np.array(map_size)) for _ in range(num_prey)]
+    food_items = [Food(20, np.random.rand(2) * np.array(map_size)) for _ in range(num_food)]
 
-    def delete_ims():
-        files = glob.glob('../images/*.png', recursive=True)
+    # plotting
+    fig, ax = plt.subplots()
+    ax.set_xlim(0, map_size[0])
+    ax.set_ylim(0, map_size[1])
 
-        for f in files:
-            try:
-                os.remove(f)
-            except OSError as e:
-                print("Error: %s : %s" % (f, e.strerror))
+    scatter_predators = ax.scatter([p.position[0] for p in predators], [p.position[1] for p in predators], color='red', marker='^', label='Predator')
+    scatter_prey = ax.scatter([p.position[0] for p in prey], [p.position[1] for p in prey], color='blue', marker='o', label='Prey')
+    scatter_food = ax.scatter([f.position[0] for f in food_items], [f.position[1] for f in food_items], color='green', marker='*', label='Food')
 
-# Main Function
-def main():
+    ax.legend()
 
-	# parse arguments
-    parser = argparse.ArgumentParser(description="Simulating Evolution")
+    ani = FuncAnimation(fig, update, frames=range(generations), repeat=False, interval=500)
+    plt.show()
 
-	# add arguments
-    # Grid
-    parser.add_argument('-N', '--grid-size', type=int, dest='N', 
-                help='One Side Length of the Square Grid', default=50, required=False)
-    # Species
-    parser.add_argument('-num', '--num-of-species', type=int, dest='ind', 
-                help='Number of Initial Species', default=30, required=False)
-    # Food
-    parser.add_argument('-food', '--num-of-food', type=int, dest='food', 
-                help='Number of Initial food', default=20, required=False)
-    # Generations
-    parser.add_argument('-gen','--interval', type=int, dest='interval',  
-                help='Amount of Generations to Simulate For', default=100, required=False)
-    # Sync/Async
-    parser.add_argument('-sync', type=bool, dest='sync',  
-                help='Synchronous or Asynchronous Updates', default=0, required=False)
-
-    args = parser.parse_args()
-
-    print("Initializing Placements...")
-    grid = Grid(n=args.N, num_food=args.food, num_ind=args.ind, sync=args.sync)
-    grid.init_placements()
-    grid.set_grid_values()
-    
-    print(f"Simulating {args.interval} Generations...")
-    for i in range(args.interval):
-        if grid.sync: 
-            grid.update_food()
-        grid.update_species()
-        grid.check_for_bad_placement()
-        grid.set_grid_values()
-        grid.plot(i)
-
-    print("Outputting GIF...")
-    grid.create_gif()
-    # delete_ims()
-        
-def delete_ims():
-    ims = glob.glob('./images/*.png')
-    for i in ims:
-        os.remove(i)
-
-# Call Main
-if __name__ == '__main__':
-    main()
-
-# Next Steps
-# 1) Add new color for super food? 
-# 2) 
-
-# Some ideas... 
-# 1) 
-# 2) Make species into NN
-# 3)  
-
-# Order seems weird: 
-# Place everything 
-# Update species energy
-# Replace Food
-# Move Ind
+    # Next Steps: 
+    # 1. Smart Sense of Predators and Prey
+    # 2. Fix Reproduction of Predators and Prey
+    # 3. 
