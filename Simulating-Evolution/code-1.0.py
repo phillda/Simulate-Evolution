@@ -3,6 +3,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import argparse
+from math import dist
 
 class Species:
     def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
@@ -20,7 +21,7 @@ class Species:
         for units in hidden_units:
             model.add(tf.keras.layers.Dense(units, activation='relu'))
 
-        model.add(tf.keras.layers.Dense(input_size, activation='linear'))  # Output layer
+        model.add(tf.keras.layers.Dense(8, activation='linear'))  # Output layer
 
         return model
 
@@ -41,6 +42,41 @@ class Species:
         if self.energy <= 0:
             self.alive = False
 
+    def direction_mapping(self):
+        '''
+        
+        Description: Converts position of species into an integer representing the relative direction.
+                    Zero represents current position of an individual. 
+        
+        Ex:
+            1   2   3
+            8   0   4
+            7   6   5
+        '''
+        position = [x / abs(x) for x in self.position] # normalize [-1,1]
+        match position:
+            case [0,0]:
+                return(0)
+            case [-1,1]:
+                return(1)
+            case [0,1]:
+                return(2)
+            case [1,1]:
+                return(3)
+            case [1,0]:
+                return(4)
+            case [1,-1]:
+                return(5)
+            case [0,-1]:
+                return(6)
+            case [-1,-1]:
+                return(7)
+            case [-1,0]:
+                return(8)
+            case _:
+                return(0)
+            
+
 class Predator(Species):
     def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
         super().__init__(speed, energy, sense_area, memory_input_size, memory_hidden_units, position)
@@ -51,8 +87,7 @@ class Prey(Species):
         super().__init__(speed, energy, sense_area, memory_input_size, memory_hidden_units, position)
         # add prey specification information here
 
-    def get_consumed(self, predator):
-        predator.feed(self.energy) # feed the predator the prey energy
+    def get_consumed(self):
         self.alive = False
 
 class Food:
@@ -60,43 +95,58 @@ class Food:
         self.energy = energy
         self.position = position
 
-    def get_consumed(self, prey):
-        prey.feed(self.energy)
+    def get_consumed(self):
         self.energy = 0
         self.new_position()
 
     def new_position(self):
-        new_position = np.random.rand(2) * np.array(map_size)
+        new_position = generate_new_position(map_size) # fix 
         self.position = new_position
 
+def generate_new_position(self, max):
+    # not working? 
+    return(np.random.rand(2) * np.array(max))
+
+def distance(position1, position2): 
+    return(np.linalg.norm(position1 - position2))
+
 def update(frame):
+    # update position
     for p in prey + predators:
         if p.alive:
             new_position = p.position + (np.random.rand(2) - 0.5) * 2
             p.move(np.clip(new_position, [0, 0], map_size))
             p.check_energy()
 
+    # for p in predators: 
+    #     if p.alive:
+    #         close_prey_positions = [pr.direction_mapping() for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
+    #         # how to input this into NN???
+            # move predator based on prey
+
     # Check for consumed food
     for f in food_items:
         for p in prey:
             if p.alive:
-                distance = np.linalg.norm(f.position - p.position)
-                if distance <= p.sense_area:
-                    f.get_consumed(p)
+                dist_f_p = distance(f.position, p.position)
+                if dist_f_p <= p.sense_area:
+                    p.feed(f.energy)
+                    f.get_consumed()
 
     # Check for consumed prey
     for p in prey:
         for pred in predators:
             if pred.alive:
-                distance = np.linalg.norm(p.position - pred.position)
-                if distance <= pred.sense_area:
-                    p.get_consumed(pred)
+                dist_p_pred = distance(p.position, pred.position)
+                if dist_p_pred <= pred.sense_area:
+                    pred.feed(p.energy)
+                    p.get_consumed() # dont pass entire class
 
     # Remove dead species
     prey[:] = [p for p in prey if p.alive]
     predators[:] = [p for p in predators if p.alive]
 
-    # Reproduction
+    # # Reproduction
     # for p in predators:
     #     for pred in [pred for pred in predators if pred != p]:
     #         if p.energy >= 10 and pred.energy >= 10:
@@ -113,10 +163,10 @@ def update(frame):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Predator-Prey Simulation")
-    parser.add_argument("--num_predators", type=int, default=50, help="Number of predators")
-    parser.add_argument("--num_prey", type=int, default=50, help="Number of prey")
-    parser.add_argument("--num_food", type=int, default=40, help="Number of food items")
-    parser.add_argument("--num_generations", type=int, default=500, help="Total number of updates")
+    parser.add_argument("--num_predators", type=int, default=2, help="Number of predators")
+    parser.add_argument("--num_prey", type=int, default=5, help="Number of prey")
+    parser.add_argument("--num_food", type=int, default=3, help="Number of food items")
+    parser.add_argument("--num_generations", type=int, default=100, help="Total number of updates")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -129,7 +179,7 @@ if __name__ == "__main__":
     generations = args.num_generations
 
     # add as argument?
-    map_size = (100, 100)
+    map_size = (5, 5)
 
     # initialize simulation variables (randomize)
     predators = [Predator(5, 50, 2, 6, [12, 12], np.random.rand(2) * np.array(map_size)) for _ in range(num_predators)]
