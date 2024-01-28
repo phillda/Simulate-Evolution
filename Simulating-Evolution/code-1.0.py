@@ -42,7 +42,7 @@ class Species:
         if self.energy <= 0:
             self.alive = False
 
-    def direction_mapping(self):
+    def direction_mapping(self): # not currently implemented
         '''
         
         Description: Converts position of species into an integer representing the relative direction.
@@ -110,6 +110,10 @@ def generate_new_position(self, max):
 def distance(position1, position2): 
     return(np.linalg.norm(position1 - position2))
 
+def pdf(array):
+    # population density to serve as input to NN
+    ...
+
 def update(frame):
     # update position
     for p in prey + predators:
@@ -123,6 +127,13 @@ def update(frame):
     #         close_prey_positions = [pr.direction_mapping() for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
     #         # how to input this into NN???
             # move predator based on prey
+
+    # update position of prey
+    for p in prey:
+        predators_in_sense_area = [prey for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
+        # input to NN
+        # get new position
+        # update position
 
     # Check for consumed food
     for f in food_items:
