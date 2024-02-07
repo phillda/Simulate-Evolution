@@ -10,7 +10,8 @@ class Species:
         self.speed = speed
         self.energy = energy
         self.sense_area = sense_area
-        self.memory = self.initialize_memory(memory_input_size, memory_hidden_units)
+        self.memory = self.initialize_memory(6, memory_hidden_units)
+        # self.memory = self.initialize_memory(memory_input_size, memory_hidden_units)
         self.position = position
         self.alive = True
 
@@ -33,6 +34,9 @@ class Species:
         self.position = new_position
 
     def sense_and_remember(self, sensory_input):
+        # sensory input - current position, nearest predator position
+        # sensory output - ideal position
+
         sensory_input = np.array(sensory_input)
         sensory_input = sensory_input.reshape((1, -1))
         new_memory = self.memory(sensory_input)
@@ -75,7 +79,10 @@ class Species:
                 return(8)
             case _:
                 return(0)
-            
+
+    def normalize_position(self, position):
+        # min-max scaling
+        return(np.divide(position, 5)) # map size        
 
 class Predator(Species):
     def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
@@ -114,6 +121,11 @@ def pdf(array):
     # population density to serve as input to NN
     ...
 
+def get_closest_position(array, pos):
+    # dictionary for position and distance
+    pos_dist_dict = dict([(distance(p.position, pos), p.position) for p in array]) # only need if statement if same species (i.e. reproduction) 
+    return(sorted(pos_dist_dict[0]))
+
 def update(frame):
     # update position
     for p in prey + predators:
@@ -122,18 +134,21 @@ def update(frame):
             p.move(np.clip(new_position, [0, 0], map_size))
             p.check_energy()
 
-    # for p in predators: 
-    #     if p.alive:
-    #         close_prey_positions = [pr.direction_mapping() for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
-    #         # how to input this into NN???
-            # move predator based on prey
-
     # update position of prey
     for p in prey:
-        predators_in_sense_area = [prey for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
-        # input to NN
-        # get new position
-        # update position
+        # predators_in_sense_area = [prey for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
+        norm_curr_position = p.normalize_position(p.position)
+        
+        pos_closest_pred = get_closest_position(predators, p.position)
+        norm_pos_closest_pred = p.normalize_position(pos_closest_pred)
+        
+        pos_closest_food = get_closest_position(food_items, p.position)
+        norm_pos_closest_food = p.normalize_position(pos_closest_food)
+        
+        new_position = p.sense_and_remember(norm_curr_position + norm_pos_closest_pred + norm_pos_closest_food) # doesnt output anything
+        p.move(new_position)
+
+        p.check_energy()
 
     # Check for consumed food
     for f in food_items:
@@ -193,8 +208,9 @@ if __name__ == "__main__":
     map_size = (5, 5)
 
     # initialize simulation variables (randomize)
-    predators = [Predator(5, 50, 2, 6, [12, 12], np.random.rand(2) * np.array(map_size)) for _ in range(num_predators)]
-    prey = [Prey(2, 40, 8, 5, [8, 8], np.random.rand(2) * np.array(map_size)) for _ in range(num_prey)]
+    # def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
+    predators = [Predator(5, 50, 2, 4, [12, 12], np.random.rand(2) * np.array(map_size)) for _ in range(num_predators)]
+    prey = [Prey(2, 40, 8, 6, [8, 8], np.random.rand(2) * np.array(map_size)) for _ in range(num_prey)]
     food_items = [Food(20, np.random.rand(2) * np.array(map_size)) for _ in range(num_food)]
 
     # plotting
@@ -212,6 +228,6 @@ if __name__ == "__main__":
     plt.show()
 
     # Next Steps: 
-    # 1. Smart Sense of Predators and Prey
+    # 1. Output the position from sense_and_remember
     # 2. Fix Reproduction of Predators and Prey
     # 3. 
