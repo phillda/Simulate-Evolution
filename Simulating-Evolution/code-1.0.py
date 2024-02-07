@@ -6,7 +6,15 @@ import argparse
 from math import dist
 
 class Species:
-    def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
+    def __init__(
+            self, 
+            speed:int, 
+            energy:int, 
+            sense_area:int, 
+            memory_input_size:int, 
+            memory_hidden_units:int, 
+            position:list[int, int], 
+            ):
         self.speed = speed
         self.energy = energy
         self.sense_area = sense_area
@@ -15,32 +23,35 @@ class Species:
         self.position = position
         self.alive = True
 
-    def initialize_memory(self, input_size, hidden_units):
+    def initialize_memory(self, input_size:int, hidden_units:int):
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.Input(shape=(input_size,)))
 
         for units in hidden_units:
             model.add(tf.keras.layers.Dense(units, activation='relu'))
 
-        model.add(tf.keras.layers.Dense(8, activation='linear'))  # Output layer
+        model.add(tf.keras.layers.Dense(2, activation='linear'))  # Output layer
 
         return model
 
-    def feed(self, food_energy):
+    def feed(self, food_energy:int):
         self.energy += food_energy
 
-    def move(self, new_position):
+    def move(self, new_position:list[int,int]):
         self.energy -= self.speed
         self.position = new_position
 
-    def sense_and_remember(self, sensory_input):
+    def sense_and_remember(self, sensory_input:list):
         # sensory input - current position, nearest predator position
         # sensory output - ideal position
 
         sensory_input = np.array(sensory_input)
         sensory_input = sensory_input.reshape((1, -1))
-        new_memory = self.memory(sensory_input)
-        self.memory.set_weights(new_memory.get_weights())
+
+        # new_memory = self.memory(sensory_input)
+        # self.memory.set_weights(new_memory.get_weights())
+
+        return(self.memory.predict(sensory_input))
 
     def check_energy(self):
         if self.energy <= 0:
@@ -80,7 +91,7 @@ class Species:
             case _:
                 return(0)
 
-    def normalize_position(self, position):
+    def normalize_position(self, position:list[int,int]):
         # min-max scaling
         return(np.divide(position, 5)) # map size        
 
@@ -98,7 +109,7 @@ class Prey(Species):
         self.alive = False
 
 class Food:
-    def __init__(self, energy, position):
+    def __init__(self, energy:int, position:list[int,int]):
         self.energy = energy
         self.position = position
 
@@ -107,12 +118,12 @@ class Food:
         self.new_position()
 
     def new_position(self):
-        new_position = generate_new_position(map_size) # fix 
+        new_position = self.generate_new_position(map_size) # fix 
         self.position = new_position
 
-def generate_new_position(self, max):
-    # not working? 
-    return(np.random.rand(2) * np.array(max))
+    def generate_new_position(self, max:tuple):
+        # not working? 
+        return(np.random.rand(2) * np.array(max))
 
 def distance(position1, position2): 
     return(np.linalg.norm(position1 - position2))
@@ -121,7 +132,7 @@ def pdf(array):
     # population density to serve as input to NN
     ...
 
-def get_closest_position(array, pos):
+def get_closest_position(array, pos:list[int,int]):
     # dictionary for position and distance
     pos_dist_dict = dict([(distance(p.position, pos), p.position) for p in array]) # only need if statement if same species (i.e. reproduction) 
     return(sorted(pos_dist_dict[0]))
@@ -134,18 +145,23 @@ def update(frame):
             p.move(np.clip(new_position, [0, 0], map_size))
             p.check_energy()
 
-    # update position of prey
-    for p in prey:
+    # update position of prey and predators
+    for p in prey + predators:
         # predators_in_sense_area = [prey for pr in prey if (dist(p.position, pr.position) < p.sense_area)]
         norm_curr_position = p.normalize_position(p.position)
         
-        pos_closest_pred = get_closest_position(predators, p.position)
-        norm_pos_closest_pred = p.normalize_position(pos_closest_pred)
-        
         pos_closest_food = get_closest_position(food_items, p.position)
         norm_pos_closest_food = p.normalize_position(pos_closest_food)
+
+        if type(p) is Prey:
+            pos_closest_pred = get_closest_position(predators, p.position)
+            norm_pos_closest_pred = p.normalize_position(pos_closest_pred)
+            new_position = p.sense_and_remember(norm_curr_position + norm_pos_closest_pred + norm_pos_closest_food) # doesnt output anything
+        elif type(p) is Predator:
+            pos_closest_prey = get_closest_position(prey, p.position)
+            norm_pos_closest_prey = p.normalize_position(pos_closest_pred)
+            new_position = p.sense_and_remember(norm_curr_position + norm_pos_closest_pred + norm_pos_closest_food) # doesnt output anything
         
-        new_position = p.sense_and_remember(norm_curr_position + norm_pos_closest_pred + norm_pos_closest_food) # doesnt output anything
         p.move(new_position)
 
         p.check_energy()
@@ -166,7 +182,7 @@ def update(frame):
                 dist_p_pred = distance(p.position, pred.position)
                 if dist_p_pred <= pred.sense_area:
                     pred.feed(p.energy)
-                    p.get_consumed() # dont pass entire class
+                    p.get_consumed()
 
     # Remove dead species
     prey[:] = [p for p in prey if p.alive]
@@ -228,6 +244,6 @@ if __name__ == "__main__":
     plt.show()
 
     # Next Steps: 
-    # 1. Output the position from sense_and_remember
+    # 1. Test and debug shit 
     # 2. Fix Reproduction of Predators and Prey
     # 3. 
