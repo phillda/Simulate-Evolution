@@ -39,19 +39,17 @@ class Species:
 
     def move(self, new_position:list[int,int]):
         self.energy -= self.speed
-        self.position = new_position
+        # self.position = new_position
+        # update position to move based off NN output
+        self.position = np.subtract(self.position, new_position) * self.move_step # move in direction of NN output
 
     def sense_and_remember(self, sensory_input:list):
         # sensory input - current position, nearest predator position
         # sensory output - ideal position
-
         sensory_input = np.array(sensory_input)
         sensory_input = sensory_input.reshape((1, -1))
-
-        # new_memory = self.memory(sensory_input)
-        # self.memory.set_weights(new_memory.get_weights())
-
-        return(self.memory.predict(sensory_input))
+        new_memory = self.memory(sensory_input)
+        return(np.multiply(new_memory[0].numpy(), 5))
 
     def check_energy(self):
         if self.energy <= 0:
@@ -98,11 +96,13 @@ class Species:
 class Predator(Species):
     def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
         super().__init__(speed, energy, sense_area, memory_input_size, memory_hidden_units, position)
+        self.move_step = 0.10
         # add pred specification information here
 
 class Prey(Species):
     def __init__(self, speed, energy, sense_area, memory_input_size, memory_hidden_units, position):
         super().__init__(speed, energy, sense_area, memory_input_size, memory_hidden_units, position)
+        self.move_step = 0.05
         # add prey specification information here
 
     def get_consumed(self):
@@ -135,7 +135,8 @@ def pdf(array):
 def get_closest_position(array, pos:list[int,int]):
     # dictionary for position and distance
     pos_dist_dict = dict([(distance(p.position, pos), p.position) for p in array]) # only need if statement if same species (i.e. reproduction) 
-    return(sorted(pos_dist_dict[0]))
+    sorted_pos_arr = sorted(pos_dist_dict)
+    return(pos_dist_dict[sorted_pos_arr[0]])
 
 def update(frame):
     # update position
@@ -156,12 +157,16 @@ def update(frame):
         if type(p) is Prey:
             pos_closest_pred = get_closest_position(predators, p.position)
             norm_pos_closest_pred = p.normalize_position(pos_closest_pred)
-            new_position = p.sense_and_remember(norm_curr_position + norm_pos_closest_pred + norm_pos_closest_food) # doesnt output anything
+            arr = np.concatenate((norm_curr_position, norm_pos_closest_pred, norm_pos_closest_food), axis=None)
+            new_position = p.sense_and_remember(arr) 
         elif type(p) is Predator:
             pos_closest_prey = get_closest_position(prey, p.position)
             norm_pos_closest_prey = p.normalize_position(pos_closest_pred)
-            new_position = p.sense_and_remember(norm_curr_position + norm_pos_closest_pred + norm_pos_closest_food) # doesnt output anything
+            arr = np.concatenate((norm_curr_position, norm_pos_closest_pred, norm_pos_closest_food), axis=None)
+            new_position = p.sense_and_remember(arr) 
         
+        print(new_position)
+
         p.move(new_position)
 
         p.check_energy()
@@ -244,6 +249,6 @@ if __name__ == "__main__":
     plt.show()
 
     # Next Steps: 
-    # 1. Test and debug shit 
+    # 1. New Position wrong? List index issues with position dictionary
     # 2. Fix Reproduction of Predators and Prey
     # 3. 
